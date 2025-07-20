@@ -39,6 +39,16 @@
             pointer-events: none;
         }
 
+        #threejs-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 5;
+        }
+
         #status {
             position: absolute;
             top: 20px;
@@ -69,6 +79,7 @@
     <div id="container">
         <video id="video" autoplay muted playsinline></video>
         <canvas id="canvas"></canvas>
+        <canvas id="threejs-canvas"></canvas>
         <div id="status">Initializing...</div>
         <div id="error">
             <h3>Error</h3>
@@ -80,8 +91,255 @@
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
     <script>
+        class ThreeJSScene {
+            constructor() {
+                this.canvas = document.getElementById('threejs-canvas');
+                this.scene = null;
+                this.camera = null;
+                this.renderer = null;
+                this.cube = null;
+                this.wireframe = null;
+                this.init();
+            }
+
+            init() {
+                this.setupScene();
+                this.createNeonCube();
+                this.animate();
+                this.handleResize();
+            }
+
+            setupScene() {
+                this.scene = new THREE.Scene();
+                this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+                this.camera.position.z = 3;
+                
+                this.renderer = new THREE.WebGLRenderer({ 
+                    canvas: this.canvas,
+                    alpha: true,
+                    antialias: false // Disable antialiasing for pixelated look
+                });
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+                this.renderer.setClearColor(0x000000, 0);
+                
+                // Add Minecraft-style lighting
+                const ambientLight = new THREE.AmbientLight(0xeeeeee, 0.8);
+                this.scene.add(ambientLight);
+                
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 1.2);
+                directionalLight.position.set(1, 1, 0.5).normalize();
+                this.scene.add(directionalLight);
+            }
+
+            createNeonCube() {
+                // Create geometry for a Minecraft-style grass block
+                const geometry = new THREE.BoxGeometry(1, 1, 1);
+                
+                // Create pixelated textures for authentic Minecraft look
+                this.createMinecraftTextures();
+                
+                // Create materials for each face using textures
+                const materials = [
+                    // Right face - grass side
+                    new THREE.MeshLambertMaterial({ 
+                        map: this.grassSideTexture,
+                        transparent: true, 
+                        opacity: 0.9
+                    }),
+                    // Left face - grass side  
+                    new THREE.MeshLambertMaterial({ 
+                        map: this.grassSideTexture,
+                        transparent: true, 
+                        opacity: 0.9
+                    }),
+                    // Top face - grass top
+                    new THREE.MeshLambertMaterial({ 
+                        map: this.grassTopTexture,
+                        transparent: true, 
+                        opacity: 0.9
+                    }),
+                    // Bottom face - dirt
+                    new THREE.MeshLambertMaterial({ 
+                        map: this.dirtTexture,
+                        transparent: true, 
+                        opacity: 0.9
+                    }),
+                    // Front face - grass side
+                    new THREE.MeshLambertMaterial({ 
+                        map: this.grassSideTexture,
+                        transparent: true, 
+                        opacity: 0.9
+                    }),
+                    // Back face - grass side
+                    new THREE.MeshLambertMaterial({ 
+                        map: this.grassSideTexture,
+                        transparent: true, 
+                        opacity: 0.9
+                    })
+                ];
+
+                // Create the cube mesh with multiple materials
+                this.cube = new THREE.Mesh(geometry, materials);
+                this.scene.add(this.cube);
+
+                // Create white wireframe with thicker lines
+                const wireframeGeometry = new THREE.EdgesGeometry(geometry);
+                const wireframeMaterial = new THREE.LineBasicMaterial({ 
+                    color: 0xffffff,
+                    linewidth: 3,
+                    transparent: true,
+                    opacity: 0.8
+                });
+                this.wireframe = new THREE.LineSegments(wireframeGeometry, wireframeMaterial);
+                this.scene.add(this.wireframe);
+            }
+
+            createMinecraftTextures() {
+                // Create authentic Minecraft grass block textures
+                const textureSize = 16;
+                
+                // Grass top texture - authentic Minecraft colors and pattern
+                const grassTopCanvas = document.createElement('canvas');
+                const grassTopCtx = grassTopCanvas.getContext('2d');
+                grassTopCanvas.width = textureSize;
+                grassTopCanvas.height = textureSize;
+                
+                // Base grass green
+                grassTopCtx.fillStyle = '#7CBD3A';
+                grassTopCtx.fillRect(0, 0, textureSize, textureSize);
+                
+                // Add Minecraft-style grass texture pattern
+                const grassPattern = [
+                    '#91D93F', '#6DB73A', '#5BA838', '#4F9C32', '#8FCC3F',
+                    '#76C942', '#5AAE35', '#91E841', '#6AB23D', '#4E9E31'
+                ];
+                
+                for (let y = 0; y < textureSize; y++) {
+                    for (let x = 0; x < textureSize; x++) {
+                        if (Math.random() < 0.3) {
+                            grassTopCtx.fillStyle = grassPattern[Math.floor(Math.random() * grassPattern.length)];
+                            grassTopCtx.fillRect(x, y, 1, 1);
+                        }
+                    }
+                }
+                
+                this.grassTopTexture = new THREE.CanvasTexture(grassTopCanvas);
+                this.grassTopTexture.magFilter = THREE.NearestFilter;
+                this.grassTopTexture.minFilter = THREE.NearestFilter;
+                
+                // Grass side texture - dirt bottom with grass overlay
+                const grassSideCanvas = document.createElement('canvas');
+                const grassSideCtx = grassSideCanvas.getContext('2d');
+                grassSideCanvas.width = textureSize;
+                grassSideCanvas.height = textureSize;
+                
+                // Dirt base (bottom portion)
+                grassSideCtx.fillStyle = '#8B7653';
+                grassSideCtx.fillRect(0, 0, textureSize, textureSize);
+                
+                // Add dirt texture
+                const dirtColors = ['#9C8A68', '#7A6B4F', '#6B5D42', '#A89870', '#786547'];
+                for (let y = 0; y < textureSize; y++) {
+                    for (let x = 0; x < textureSize; x++) {
+                        if (Math.random() < 0.4) {
+                            grassSideCtx.fillStyle = dirtColors[Math.floor(Math.random() * dirtColors.length)];
+                            grassSideCtx.fillRect(x, y, 1, 1);
+                        }
+                    }
+                }
+                
+                // Grass overlay on top portion
+                grassSideCtx.fillStyle = '#7CBD3A';
+                grassSideCtx.fillRect(0, 0, textureSize, 4);
+                
+                // Add grass details to overlay
+                for (let y = 0; y < 4; y++) {
+                    for (let x = 0; x < textureSize; x++) {
+                        if (Math.random() < 0.25) {
+                            grassSideCtx.fillStyle = grassPattern[Math.floor(Math.random() * grassPattern.length)];
+                            grassSideCtx.fillRect(x, y, 1, 1);
+                        }
+                    }
+                }
+                
+                this.grassSideTexture = new THREE.CanvasTexture(grassSideCanvas);
+                this.grassSideTexture.magFilter = THREE.NearestFilter;
+                this.grassSideTexture.minFilter = THREE.NearestFilter;
+                
+                // Pure dirt texture (bottom face)
+                const dirtCanvas = document.createElement('canvas');
+                const dirtCtx = dirtCanvas.getContext('2d');
+                dirtCanvas.width = textureSize;
+                dirtCanvas.height = textureSize;
+                
+                dirtCtx.fillStyle = '#8B7653';
+                dirtCtx.fillRect(0, 0, textureSize, textureSize);
+                
+                // Add detailed dirt pattern
+                for (let y = 0; y < textureSize; y++) {
+                    for (let x = 0; x < textureSize; x++) {
+                        if (Math.random() < 0.4) {
+                            dirtCtx.fillStyle = dirtColors[Math.floor(Math.random() * dirtColors.length)];
+                            dirtCtx.fillRect(x, y, 1, 1);
+                        }
+                    }
+                }
+                
+                this.dirtTexture = new THREE.CanvasTexture(dirtCanvas);
+                this.dirtTexture.magFilter = THREE.NearestFilter;
+                this.dirtTexture.minFilter = THREE.NearestFilter;
+            }
+
+            animate() {
+                requestAnimationFrame(() => this.animate());
+                if (this.cube && this.wireframe) {
+                    this.cube.rotation.x += 0.005;
+                    this.cube.rotation.y += 0.01;
+                    this.wireframe.rotation.x = this.cube.rotation.x;
+                    this.wireframe.rotation.y = this.cube.rotation.y;
+                }
+                this.renderer.render(this.scene, this.camera);
+            }
+
+            updateFromHandTracking(rightHandDistance, leftIndexPosition) {
+                if (rightHandDistance !== null) {
+                    const scale = Math.max(0.5, Math.min(2.5, rightHandDistance * 3));
+                    this.cube.scale.set(scale, scale, scale);
+                    this.wireframe.scale.set(scale, scale, scale);
+                }
+                if (leftIndexPosition !== null) {
+                    this.checkCubeTouch(leftIndexPosition);
+                }
+            }
+
+            checkCubeTouch(indexPosition) {
+                const vector = new THREE.Vector3(
+                    (indexPosition.x / window.innerWidth) * 2 - 1,
+                    -(indexPosition.y / window.innerHeight) * 2 + 1,
+                    0.5
+                );
+                vector.unproject(this.camera);
+                const raycaster = new THREE.Raycaster();
+                const direction = vector.sub(this.camera.position).normalize();
+                raycaster.set(this.camera.position, direction);
+                const intersects = raycaster.intersectObject(this.cube);
+                if (intersects.length > 0) {
+                    this.changeToRandomNeonColor();
+                }
+            }
+
+            handleResize() {
+                window.addEventListener('resize', () => {
+                    this.camera.aspect = window.innerWidth / window.innerHeight;
+                    this.camera.updateProjectionMatrix();
+                    this.renderer.setSize(window.innerWidth, window.innerHeight);
+                });
+            }
+        }
+
         class HandTracker {
             constructor() {
                 this.video = document.getElementById('video');
@@ -90,10 +348,8 @@
                 this.status = document.getElementById('status');
                 this.errorDiv = document.getElementById('error');
                 this.errorMessage = document.getElementById('error-message');
-                
                 this.hands = null;
                 this.camera = null;
-                
                 this.init();
             }
 
@@ -116,9 +372,7 @@
                             facingMode: 'user'
                         }
                     });
-                    
                     this.video.srcObject = stream;
-                    
                     return new Promise((resolve) => {
                         this.video.onloadedmetadata = () => {
                             this.resizeCanvas();
@@ -131,26 +385,21 @@
             }
 
             async setupMediaPipe() {
-                // Wait for scripts to load
                 await this.waitForMediaPipe();
-                
                 this.hands = new window.Hands({
                     locateFile: (file) => {
                         return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
                     }
                 });
-
                 this.hands.setOptions({
                     maxNumHands: 2,
                     modelComplexity: 1,
                     minDetectionConfidence: 0.5,
                     minTrackingConfidence: 0.5
                 });
-
                 this.hands.onResults((results) => {
                     this.onResults(results);
                 });
-
                 this.camera = new window.Camera(this.video, {
                     onFrame: async () => {
                         await this.hands.send({ image: this.video });
@@ -158,15 +407,13 @@
                     width: 1280,
                     height: 720
                 });
-
                 await this.camera.start();
             }
 
             waitForMediaPipe() {
                 return new Promise((resolve, reject) => {
                     let attempts = 0;
-                    const maxAttempts = 50; // 5 seconds
-                    
+                    const maxAttempts = 50;
                     const checkLoaded = () => {
                         if (window.Hands && window.Camera) {
                             resolve();
@@ -177,24 +424,30 @@
                             reject(new Error('MediaPipe libraries failed to load'));
                         }
                     };
-                    
                     checkLoaded();
                 });
             }
 
             onResults(results) {
-                // Clear canvas
                 this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                let rightHandDistance = null;
+                let leftIndexPosition = null;
                 
                 if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
                     this.updateStatus(`Tracking ${results.multiHandLandmarks.length} hand(s)`);
-                    
-                    // Draw landmarks for each detected hand
                     for (let i = 0; i < results.multiHandLandmarks.length; i++) {
                         const landmarks = results.multiHandLandmarks[i];
                         const handedness = results.multiHandedness[i];
-                        
+                        const isRightHand = handedness.label === 'Right';
                         this.drawHand(landmarks, handedness);
+                        if (isRightHand) {
+                            rightHandDistance = this.calculateThumbIndexDistance(landmarks);
+                        } else {
+                            leftIndexPosition = this.getIndexFingerPosition(landmarks);
+                        }
+                    }
+                    if (window.threeJSScene) {
+                        window.threeJSScene.updateFromHandTracking(rightHandDistance, leftIndexPosition);
                     }
                 } else {
                     this.updateStatus('Hand tracking active - Show your hands');
@@ -203,66 +456,54 @@
 
             drawHand(landmarks, handedness) {
                 const isRightHand = handedness.label === 'Right';
-                const color = isRightHand ? '#00ff00' : '#ff0000'; // Green for right, red for left
-                
-                // Draw connections between landmarks
+                const color = isRightHand ? '#00ff00' : '#ff0000';
                 this.drawConnections(landmarks, color);
-                
-                // Draw landmark points
                 this.drawLandmarks(landmarks, color);
             }
 
             drawConnections(landmarks, color) {
                 const connections = [
-                    // Thumb
                     [0, 1], [1, 2], [2, 3], [3, 4],
-                    // Index finger
                     [0, 5], [5, 6], [6, 7], [7, 8],
-                    // Middle finger
                     [0, 9], [9, 10], [10, 11], [11, 12],
-                    // Ring finger
                     [0, 13], [13, 14], [14, 15], [15, 16],
-                    // Pinky
                     [0, 17], [17, 18], [18, 19], [19, 20],
-                    // Palm
                     [5, 9], [9, 13], [13, 17]
                 ];
-
                 this.ctx.strokeStyle = color;
                 this.ctx.lineWidth = 2;
                 this.ctx.beginPath();
-
                 connections.forEach(([start, end]) => {
                     const startPoint = this.normalizePoint(landmarks[start]);
                     const endPoint = this.normalizePoint(landmarks[end]);
-                    
                     this.ctx.moveTo(startPoint.x, startPoint.y);
                     this.ctx.lineTo(endPoint.x, endPoint.y);
                 });
-
                 this.ctx.stroke();
             }
 
             drawLandmarks(landmarks, color) {
                 this.ctx.fillStyle = color;
-                
                 landmarks.forEach((landmark, index) => {
                     const point = this.normalizePoint(landmark);
-                    
-                    // Draw different sizes for different landmark types
-                    const radius = index === 0 ? 6 : (index % 4 === 0 ? 5 : 3); // Bigger for palm and joint points
-                    
+                    const radius = index === 0 ? 6 : (index % 4 === 0 ? 5 : 3);
                     this.ctx.beginPath();
                     this.ctx.arc(point.x, point.y, radius, 0, 2 * Math.PI);
                     this.ctx.fill();
                 });
             }
 
+            calculateThumbIndexDistance(landmarks) {
+                const thumbTip = landmarks[4];
+                const indexTip = landmarks[8];
+                const dx = thumbTip.x - indexTip.x;
+                const dy = thumbTip.y - indexTip.y;
+                return Math.sqrt(dx * dx + dy * dy);
+            }
+
             normalizePoint(landmark) {
-                // MediaPipe returns normalized coordinates (0-1)
-                // Convert to canvas coordinates and mirror horizontally
                 return {
-                    x: this.canvas.width - (landmark.x * this.canvas.width), // Mirror horizontally
+                    x: this.canvas.width - (landmark.x * this.canvas.width),
                     y: landmark.y * this.canvas.height
                 };
             }
@@ -284,22 +525,20 @@
             }
         }
 
-        // Handle window resize
         window.addEventListener('resize', () => {
             if (window.handTracker) {
                 window.handTracker.resizeCanvas();
             }
         });
 
-        // Initialize when page loads
         window.addEventListener('load', () => {
             window.handTracker = new HandTracker();
+            window.threeJSScene = new ThreeJSScene();
         });
 
-        // Handle page visibility changes
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) {
-                // Page is hidden, you might want to pause tracking
+                // Page is hidden
             } else {
                 // Page is visible again
             }
