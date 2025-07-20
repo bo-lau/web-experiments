@@ -87,10 +87,10 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1640029074/camera_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils@0.6.1629159505/control_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3.1620248257/drawing_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/hands.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
     <script>
@@ -102,6 +102,9 @@
                 this.renderer = null;
                 this.cube = null;
                 this.wireframe = null;
+                this.autoRotateSpeed = { x: 0.005, y: 0.01 };
+                this.manualRotation = { x: 0, y: 0 };
+                this.isManualControl = false;
                 this.init();
             }
 
@@ -296,8 +299,17 @@
             animate() {
                 requestAnimationFrame(() => this.animate());
                 if (this.cube && this.wireframe) {
-                    this.cube.rotation.x += 0.005;
-                    this.cube.rotation.y += 0.01;
+                    if (this.isManualControl) {
+                        // Use manual rotation from hand gestures
+                        this.cube.rotation.x = this.manualRotation.x;
+                        this.cube.rotation.y = this.manualRotation.y;
+                    } else {
+                        // Auto-rotate when no manual control
+                        this.cube.rotation.x += this.autoRotateSpeed.x;
+                        this.cube.rotation.y += this.autoRotateSpeed.y;
+                    }
+                    
+                    // Keep wireframe in sync
                     this.wireframe.rotation.x = this.cube.rotation.x;
                     this.wireframe.rotation.y = this.cube.rotation.y;
                 }
@@ -305,30 +317,37 @@
             }
 
             updateFromHandTracking(rightHandDistance, leftIndexPosition) {
+                // Right hand: control cube size based on thumb-index distance
                 if (rightHandDistance !== null) {
                     const scale = Math.max(0.5, Math.min(2.5, rightHandDistance * 3));
                     this.cube.scale.set(scale, scale, scale);
                     this.wireframe.scale.set(scale, scale, scale);
                 }
+                
+                // Left hand: control cube rotation based on index finger position
                 if (leftIndexPosition !== null) {
-                    this.checkCubeTouch(leftIndexPosition);
+                    this.updateCubeRotation(leftIndexPosition);
+                    this.isManualControl = true;
+                } else {
+                    this.isManualControl = false;
                 }
             }
 
-            checkCubeTouch(indexPosition) {
-                const vector = new THREE.Vector3(
-                    (indexPosition.x / window.innerWidth) * 2 - 1,
-                    -(indexPosition.y / window.innerHeight) * 2 + 1,
-                    0.5
-                );
-                vector.unproject(this.camera);
-                const raycaster = new THREE.Raycaster();
-                const direction = vector.sub(this.camera.position).normalize();
-                raycaster.set(this.camera.position, direction);
-                const intersects = raycaster.intersectObject(this.cube);
-                if (intersects.length > 0) {
-                    this.changeToRandomNeonColor();
-                }
+            updateCubeRotation(indexPosition) {
+                // Convert screen position to rotation values
+                // X position controls Y rotation (left/right movement rotates around Y axis)
+                // Y position controls X rotation (up/down movement rotates around X axis)
+                
+                const centerX = window.innerWidth / 2;
+                const centerY = window.innerHeight / 2;
+                
+                // Calculate relative position from center (-1 to 1)
+                const relativeX = (indexPosition.x - centerX) / (window.innerWidth / 2);
+                const relativeY = (indexPosition.y - centerY) / (window.innerHeight / 2);
+                
+                // Map to rotation values (multiply by Math.PI for full rotation range)
+                this.manualRotation.y = relativeX * Math.PI;
+                this.manualRotation.x = -relativeY * Math.PI; // Negative for intuitive up/down control
             }
 
             handleResize() {
@@ -385,45 +404,67 @@
             }
 
             async setupMediaPipe() {
-                await this.waitForMediaPipe();
-                this.hands = new window.Hands({
-                    locateFile: (file) => {
-                        return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
-                    }
-                });
-                this.hands.setOptions({
-                    maxNumHands: 2,
-                    modelComplexity: 1,
-                    minDetectionConfidence: 0.5,
-                    minTrackingConfidence: 0.5
-                });
-                this.hands.onResults((results) => {
-                    this.onResults(results);
-                });
-                this.camera = new window.Camera(this.video, {
-                    onFrame: async () => {
-                        await this.hands.send({ image: this.video });
-                    },
-                    width: 1280,
-                    height: 720
-                });
-                await this.camera.start();
+                try {
+                    await this.waitForMediaPipe();
+                    
+                    this.hands = new window.Hands({
+                        locateFile: (file) => {
+                            return `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/${file}`;
+                        }
+                    });
+                    
+                    this.hands.setOptions({
+                        maxNumHands: 2,
+                        modelComplexity: 1,
+                        minDetectionConfidence: 0.5,
+                        minTrackingConfidence: 0.5
+                    });
+                    
+                    this.hands.onResults((results) => {
+                        this.onResults(results);
+                    });
+                    
+                    this.camera = new window.Camera(this.video, {
+                        onFrame: async () => {
+                            await this.hands.send({ image: this.video });
+                        },
+                        width: 1280,
+                        height: 720
+                    });
+                    
+                    await this.camera.start();
+                } catch (error) {
+                    console.error('MediaPipe setup error:', error);
+                    throw error;
+                }
             }
 
             waitForMediaPipe() {
                 return new Promise((resolve, reject) => {
                     let attempts = 0;
-                    const maxAttempts = 50;
+                    const maxAttempts = 100; // Increased attempts
+                    
                     const checkLoaded = () => {
-                        if (window.Hands && window.Camera) {
+                        console.log(`Checking MediaPipe libraries... attempt ${attempts + 1}`);
+                        
+                        if (window.Hands && window.Camera && window.drawConnectors && window.drawLandmarks) {
+                            console.log('All MediaPipe libraries loaded successfully');
                             resolve();
                         } else if (attempts < maxAttempts) {
                             attempts++;
-                            setTimeout(checkLoaded, 100);
+                            setTimeout(checkLoaded, 200); // Increased timeout
                         } else {
-                            reject(new Error('MediaPipe libraries failed to load'));
+                            const missingLibs = [];
+                            if (!window.Hands) missingLibs.push('Hands');
+                            if (!window.Camera) missingLibs.push('Camera');
+                            if (!window.drawConnectors) missingLibs.push('drawConnectors');
+                            if (!window.drawLandmarks) missingLibs.push('drawLandmarks');
+                            
+                            console.error('Missing MediaPipe libraries:', missingLibs);
+                            reject(new Error(`MediaPipe libraries failed to load: ${missingLibs.join(', ')}`));
                         }
                     };
+                    
                     checkLoaded();
                 });
             }
@@ -501,6 +542,14 @@
                 return Math.sqrt(dx * dx + dy * dy);
             }
 
+            getIndexFingerPosition(landmarks) {
+                const indexTip = landmarks[8];
+                return {
+                    x: this.canvas.width - (indexTip.x * this.canvas.width),
+                    y: indexTip.y * this.canvas.height
+                };
+            }
+
             normalizePoint(landmark) {
                 return {
                     x: this.canvas.width - (landmark.x * this.canvas.width),
@@ -525,6 +574,14 @@
             }
         }
 
+        // Add error handling for script loading
+        window.addEventListener('error', (e) => {
+            console.error('Script loading error:', e);
+            if (e.target && e.target.src) {
+                console.error('Failed to load:', e.target.src);
+            }
+        });
+
         window.addEventListener('resize', () => {
             if (window.handTracker) {
                 window.handTracker.resizeCanvas();
@@ -532,8 +589,17 @@
         });
 
         window.addEventListener('load', () => {
-            window.handTracker = new HandTracker();
-            window.threeJSScene = new ThreeJSScene();
+            try {
+                console.log('Initializing hand tracker...');
+                window.handTracker = new HandTracker();
+                console.log('Initializing ThreeJS scene...');
+                window.threeJSScene = new ThreeJSScene();
+                console.log('Initialization complete');
+            } catch (error) {
+                console.error('Initialization error:', error);
+                document.getElementById('error-message').textContent = 'Initialization failed: ' + error.message;
+                document.getElementById('error').style.display = 'block';
+            }
         });
 
         document.addEventListener('visibilitychange', () => {
