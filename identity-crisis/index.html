@@ -163,10 +163,57 @@
                     const width = bbox.width * canvasRatio;
                     const height = bbox.height * canvasRatio;
 
-                    // Draw bounding box
+                    // Draw camera frame/viewfinder
                     ctx.strokeStyle = '#ffb3d9';
-                    ctx.lineWidth = 3;
-                    ctx.strokeRect(x, y, width, height);
+                    ctx.lineWidth = 4;
+                    
+                    // Draw corner brackets instead of full rectangle
+                    const cornerLength = Math.min(width, height) * 0.15; // 15% of the smaller dimension
+                    
+                    // Top-left corner
+                    ctx.beginPath();
+                    ctx.moveTo(x, y + cornerLength);
+                    ctx.lineTo(x, y);
+                    ctx.lineTo(x + cornerLength, y);
+                    ctx.stroke();
+                    
+                    // Top-right corner
+                    ctx.beginPath();
+                    ctx.moveTo(x + width - cornerLength, y);
+                    ctx.lineTo(x + width, y);
+                    ctx.lineTo(x + width, y + cornerLength);
+                    ctx.stroke();
+                    
+                    // Bottom-left corner
+                    ctx.beginPath();
+                    ctx.moveTo(x, y + height - cornerLength);
+                    ctx.lineTo(x, y + height);
+                    ctx.lineTo(x + cornerLength, y + height);
+                    ctx.stroke();
+                    
+                    // Bottom-right corner
+                    ctx.beginPath();
+                    ctx.moveTo(x + width - cornerLength, y + height);
+                    ctx.lineTo(x + width, y + height);
+                    ctx.lineTo(x + width, y + height - cornerLength);
+                    ctx.stroke();
+                    
+                    // Draw center crosshair/focus point
+                    const centerX_frame = x + width / 2;
+                    const centerY_frame = y + height / 2;
+                    const crosshairSize = 10;
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(centerX_frame - crosshairSize, centerY_frame);
+                    ctx.lineTo(centerX_frame + crosshairSize, centerY_frame);
+                    ctx.moveTo(centerX_frame, centerY_frame - crosshairSize);
+                    ctx.lineTo(centerX_frame, centerY_frame + crosshairSize);
+                    ctx.stroke();
+                    
+                    // Add small circle in center
+                    ctx.beginPath();
+                    ctx.arc(centerX_frame, centerY_frame, 3, 0, 2 * Math.PI);
+                    ctx.stroke();
 
                     // Draw confidence percentage
                     if (detection.categories && detection.categories.length > 0) {
