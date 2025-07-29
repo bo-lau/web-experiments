@@ -5,6 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MediaPipe Face Detection Demo</title>
     <style>
+        @font-face {
+            font-family: 'Mondwest';
+            src: url('Mondwest-Regular.otf') format('opentype');
+            font-weight: normal;
+            font-style: normal;
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -137,11 +144,17 @@
                         const confidence = Math.round(detection.categories[0].score * 100);
                         
                         ctx.fillStyle = '#ffb3d9';
-                        ctx.font = '18px Arial';
+                        ctx.font = '36px Mondwest, Arial';
                         ctx.strokeStyle = '#ff0000';
-                        ctx.lineWidth = 3;
+                        ctx.lineWidth = 4;
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
                         
-                        const text = `Face ${index + 1}: ${confidence}%`;
+                        const text = `I don't know who I am\n${confidence}%`;
+                        
+                        // Calculate top position of the bounding box
+                        const centerX = x + width / 2;
+                        const topY = y + 30; // Position near the top of the box
                         
                         // Save the current transformation
                         ctx.save();
@@ -149,12 +162,23 @@
                         // Flip the text horizontally to reverse it
                         ctx.scale(-1, 1);
                         
-                        // Draw text with outline for better visibility (adjust x position for flip)
-                        ctx.strokeText(text, -(x + ctx.measureText(text).width), y - 10);
-                        ctx.fillText(text, -(x + ctx.measureText(text).width), y - 10);
+                        // Draw text with outline at center (adjust x position for flip)
+                        // Split text into lines and draw each line separately
+                        const lines = text.split('\n');
+                        const lineHeight = 40;
+                        const totalHeight = lines.length * lineHeight;
+                        const startY = topY;
                         
-                        // Restore the transformation
+                        lines.forEach((line, index) => {
+                            const lineY = startY + index * lineHeight;
+                            ctx.strokeText(line, -centerX, lineY);
+                            ctx.fillText(line, -centerX, lineY);
+                        });
+                        
+                        // Restore the transformation and text alignment
                         ctx.restore();
+                        ctx.textAlign = 'start';
+                        ctx.textBaseline = 'alphabetic';
                     }
                 });
             } else {
