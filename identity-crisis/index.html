@@ -97,6 +97,23 @@
         let faceDetector;
         let runningMode = "VIDEO";
         let lastVideoTime = -1;
+        let globalConfidence = 0; // Track overall confidence
+        let messageRotationIndex = 0; // Global rotation index
+        let confidenceChangeThreshold = 2; // Only rotate when confidence changes by this amount
+
+        // Array of existential crisis messages
+        const existentialMessages = [
+            "I don't know who I am",
+            "I don't know what I'm doing with my life", 
+            "What do I do with my life",
+            "Am I even real right now",
+            "Is this my best angle tho",
+            "Why am I like this",
+            "I'm having an identity crisis",
+            "Who even am I anymore",
+            "I'm just vibing honestly",
+            "This is my villain origin story"
+        ];
 
         function showError(message) {
             errorMessage.textContent = message;
@@ -119,6 +136,18 @@
             
             if (results.detections && results.detections.length > 0) {
                 updateStatus(`Faces detected: ${results.detections.length}`);
+                
+                // Get the primary face (largest or first detected)
+                const primaryDetection = results.detections[0];
+                if (primaryDetection.categories && primaryDetection.categories.length > 0) {
+                    const currentConfidence = Math.round(primaryDetection.categories[0].score * 100);
+                    
+                    // Check if confidence changed significantly
+                    if (Math.abs(currentConfidence - globalConfidence) >= confidenceChangeThreshold) {
+                        messageRotationIndex = (messageRotationIndex + 1) % existentialMessages.length;
+                        globalConfidence = currentConfidence;
+                    }
+                }
                 
                 results.detections.forEach((detection, index) => {
                     // Get bounding box - MediaPipe provides pixel coordinates
@@ -143,6 +172,9 @@
                     if (detection.categories && detection.categories.length > 0) {
                         const confidence = Math.round(detection.categories[0].score * 100);
                         
+                        // Get current message (same for all faces)
+                        const currentMessage = existentialMessages[messageRotationIndex];
+                        
                         ctx.fillStyle = '#ffb3d9';
                         ctx.font = '36px Mondwest, Arial';
                         ctx.strokeStyle = '#ff0000';
@@ -150,7 +182,7 @@
                         ctx.textAlign = 'center';
                         ctx.textBaseline = 'middle';
                         
-                        const text = `I don't know who I am\n${confidence}%`;
+                        const text = `${currentMessage}\n${confidence}%`;
                         
                         // Calculate top position of the bounding box
                         const centerX = x + width / 2;
